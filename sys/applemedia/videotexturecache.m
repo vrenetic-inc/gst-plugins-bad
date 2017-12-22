@@ -172,7 +172,7 @@ _do_create_memory (GstGLContext * context, ContextThreadData * data)
         plane = 0;
         goto success;
       case GST_VIDEO_FORMAT_NV12: {
-        GstGLFormat texifmt, texfmt;
+        GstGLFormat texfmt;
 
         if (plane == 0)
           texformat = GST_GL_LUMINANCE;
