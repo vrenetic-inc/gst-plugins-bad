@@ -186,6 +186,9 @@ static gboolean
 gst_vtdec_stop (GstVideoDecoder * decoder)
 {
   GstVtdec *vtdec = GST_VTDEC (decoder);
+    
+  /* amykhaylyshyn: flush all frames to release memory */
+  gst_vtdec_push_frames_if_needed (vtdec, FALSE, TRUE);
 
   if (vtdec->input_state)
     gst_video_codec_state_unref (vtdec->input_state);
