@@ -231,7 +231,7 @@ gst_vtdec_negotiate (GstVideoDecoder * decoder)
   GstVtdec *vtdec;
   OSStatus err = noErr;
   GstCapsFeatures *features = NULL;
-  gboolean output_textures;
+  gboolean output_textures = FALSE;
 
   vtdec = GST_VTDEC (decoder);
   if (vtdec->session)
@@ -314,7 +314,9 @@ gst_vtdec_negotiate (GstVideoDecoder * decoder)
     }
   }
 
-  if (vtdec->texture_cache != NULL && !output_textures) {
+  // NOTE(amykhajlyshyn): video resolution might change so we need to reset
+  // current texture cache without checking if we create output_textures
+  if (vtdec->texture_cache != NULL/* && !output_textures*/) {
     gst_video_texture_cache_free (vtdec->texture_cache);
     vtdec->texture_cache = NULL;
   }
