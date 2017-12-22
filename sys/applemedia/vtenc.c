@@ -146,11 +146,15 @@ static void gst_pixel_buffer_release_cb (void *releaseRefCon,
 #endif
 
 #ifdef HAVE_IOS
-static GstStaticCaps sink_caps =
-GST_STATIC_CAPS (GST_VIDEO_CAPS_MAKE ("{ NV12, I420 }"));
+static GstStaticCaps raw_caps =
+GST_STATIC_CAPS (GST_VIDEO_CAPS_MAKE("{ NV12, I420, BGRA }"));
+static GstStaticCaps gl_caps =
+GST_STATIC_CAPS (GST_VIDEO_CAPS_MAKE_WITH_FEATURES("memory:GLMemory", "{ NV12, I420, BGRA }"));
 #else
-static GstStaticCaps sink_caps =
-GST_STATIC_CAPS (GST_VIDEO_CAPS_MAKE ("{ UYVY, NV12, I420 }"));
+static GstStaticCaps raw_caps =
+GST_STATIC_CAPS (GST_VIDEO_CAPS_MAKE("{ UYVY, NV12, I420 }"));
+static GstStaticCaps gl_caps =
+GST_STATIC_CAPS (GST_VIDEO_CAPS_MAKE_WITH_FEATURES("memory:GLMemory", "{ UYVY, NV12, I420 }"));
 #endif
 
 static void
@@ -176,9 +180,9 @@ gst_vtenc_base_init (GstVTEncClass * klass)
 
   g_free (longname);
   g_free (description);
-
-  sink_template = gst_pad_template_new ("sink",
-      GST_PAD_SINK, GST_PAD_ALWAYS, gst_static_caps_get (&sink_caps));
+    
+  GstCaps *sink_caps = gst_caps_merge(gst_static_caps_get(&raw_caps), gst_static_caps_get(&gl_caps));
+  sink_template = gst_pad_template_new ("sink", GST_PAD_SINK, GST_PAD_ALWAYS, sink_caps);
   gst_element_class_add_pad_template (element_class, sink_template);
 
   src_caps = gst_caps_new_simple (codec_details->mimetype,
@@ -813,6 +817,24 @@ gst_vtenc_create_session (GstVTEnc * self)
   gst_vtutil_dict_set_i32 (pb_attrs, kCVPixelBufferHeightKey,
       self->negotiated_height);
 
+  OSType pixel_format_type;
+  switch (GST_VIDEO_INFO_FORMAT (&self->video_info)) {
+    case GST_VIDEO_FORMAT_I420:
+      pixel_format_type = kCVPixelFormatType_420YpCbCr8Planar;
+      break;
+    case GST_VIDEO_FORMAT_NV12:
+      pixel_format_type = kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange;
+      break;
+    case GST_VIDEO_FORMAT_BGRA:
+      pixel_format_type = kCVPixelFormatType_32BGRA;
+      break;
+    default:
+      pixel_format_type = kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange;
+      break;
+  }
+    
+  gst_vtutil_dict_set_i32 (pb_attrs, kCVPixelBufferPixelFormatTypeKey, pixel_format_type);
+
   status = VTCompressionSessionCreate (NULL,
       self->negotiated_width, self->negotiated_height,
       self->details->format_id, encoder_spec, pb_attrs, NULL,
@@ -1112,6 +1134,9 @@ gst_vtenc_encode_frame (GstVTEnc * self, GstVideoCodecFrame * frame)
       case GST_VIDEO_FORMAT_NV12:
         pixel_format_type = kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange;
         break;
+      case GST_VIDEO_FORMAT_BGRA:
+        pixel_format_type = kCVPixelFormatType_32BGRA;
+        break;
       default:
         goto cv_error;
     }
@@ -1188,6 +1213,9 @@ gst_vtenc_encode_frame (GstVTEnc * self, GstVideoCodecFrame * frame)
           break;
         case GST_VIDEO_FORMAT_UYVY:
           pixel_format_type = kCVPixelFormatType_422YpCbCr8;
+          break;
+        case GST_VIDEO_FORMAT_BGRA:
+          pixel_format_type = kCVPixelFormatType_32BGRA;
           break;
         default:
           gst_vtenc_frame_free (vframe);
