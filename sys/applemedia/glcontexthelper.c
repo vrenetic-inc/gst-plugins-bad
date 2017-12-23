@@ -34,7 +34,8 @@ GstGLContextHelper *
 gst_gl_context_helper_new (GstElement * element)
 {
   GstGLContextHelper *ctxh = g_new0 (GstGLContextHelper, 1);
-  ctxh->element = gst_object_ref (element);
+  // do not call g_object_ref - it causes reference loop
+  ctxh->element = element;
 
   return ctxh;
 }
@@ -43,8 +44,6 @@ void
 gst_gl_context_helper_free (GstGLContextHelper * ctxh)
 {
   g_return_if_fail (ctxh != NULL);
-
-  gst_object_unref (ctxh->element);
 
   if (ctxh->display)
     gst_object_unref (ctxh->display);
