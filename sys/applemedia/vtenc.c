@@ -695,6 +695,10 @@ gst_vtenc_set_format (GstVideoEncoder * enc, GstVideoCodecState * state)
   self->negotiated_fps_d = state->info.fps_d;
   self->video_info = state->info;
 
+  // flush all frames before destroying session to avoid deadlock due to
+  // stream lock which is acquired in setcaps function of VideoEncoder
+  gst_vtenc_flush (enc);
+
   GST_OBJECT_LOCK (self);
   gst_vtenc_destroy_session (self, &self->session);
   GST_OBJECT_UNLOCK (self);
