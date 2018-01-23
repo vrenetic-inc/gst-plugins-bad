@@ -118,6 +118,8 @@ static void gst_vtenc_session_configure_max_keyframe_interval_duration
     (GstVTEnc * self, VTCompressionSessionRef session, gdouble duration);
 static void gst_vtenc_session_configure_bitrate (GstVTEnc * self,
     VTCompressionSessionRef session, guint bitrate);
+static void gst_vtenc_session_configure_datarate(GstVTEnc * self,
+    VTCompressionSessionRef session, gint64 bytes, gint64 duration);
 static OSStatus gst_vtenc_session_configure_property_int (GstVTEnc * self,
     VTCompressionSessionRef session, CFStringRef name, gint value);
 static OSStatus gst_vtenc_session_configure_property_double (GstVTEnc * self,
@@ -311,12 +313,7 @@ static void
 gst_vtenc_set_bitrate (GstVTEnc * self, guint bitrate)
 {
   GST_OBJECT_LOCK (self);
-
   self->bitrate = bitrate;
-
-  if (self->session != NULL)
-    gst_vtenc_session_configure_bitrate (self, self->session, bitrate);
-
   GST_OBJECT_UNLOCK (self);
 }
 
@@ -697,7 +694,8 @@ gst_vtenc_set_format (GstVideoEncoder * enc, GstVideoCodecState * state)
 
   // flush all frames before destroying session to avoid deadlock due to
   // stream lock which is acquired in setcaps function of VideoEncoder
-  gst_vtenc_flush (enc);
+  if (self->session)
+    gst_vtenc_flush (enc);
 
   GST_OBJECT_LOCK (self);
   gst_vtenc_destroy_session (self, &self->session);
@@ -1039,6 +1037,29 @@ gst_vtenc_session_configure_bitrate (GstVTEnc * self,
 {
   gst_vtenc_session_configure_property_int (self, session,
       kVTCompressionPropertyKey_AverageBitRate, bitrate);
+  gst_vtenc_session_configure_datarate(self, session,
+      (bitrate * 3) / 16 /* bitrate * 1.5 / 8 */, 1);
+}
+
+static void
+gst_vtenc_session_configure_datarate(GstVTEnc * self,
+    VTCompressionSessionRef session, gint64 bytes, gint64 duration)
+{
+  OSStatus status;
+  CFNumberRef cf_bytes = CFNumberCreate(kCFAllocatorDefault, kCFNumberSInt64Type, &bytes);
+  CFNumberRef cf_duration = CFNumberCreate(kCFAllocatorDefault, kCFNumberSInt64Type, &duration);
+  CFMutableArrayRef limit = CFArrayCreateMutable(kCFAllocatorDefault, 2, &kCFTypeArrayCallBacks);
+  gchar name_str[128];
+    
+  CFArrayAppendValue(limit, cf_bytes);
+  CFArrayAppendValue(limit, cf_duration);
+  status = VTSessionSetProperty(session, kVTCompressionPropertyKey_DataRateLimits, limit);
+  CFStringGetCString (kVTCompressionPropertyKey_DataRateLimits, name_str,
+      sizeof (name_str), kCFStringEncodingUTF8);
+  GST_DEBUG_OBJECT (self, "%s(%ld,%ld) => %d", name_str, bytes, duration, (int) status);
+  CFRelease(cf_bytes);
+  CFRelease(cf_duration);
+  CFRelease(limit);
 }
 
 static void
@@ -1294,6 +1315,18 @@ gst_vtenc_encode_frame (GstVTEnc * self, GstVideoCodecFrame * frame)
    * handle a buffer... which will take the stream
    * lock from another thread and then deadlock */
   GST_VIDEO_ENCODER_STREAM_UNLOCK (self);
+    
+  /* Apply new bitrate if needed */
+  if (self->effective_bitrate != self->bitrate) {
+    vt_status = VTCompressionSessionCompleteFrames (self->session, kCMTimePositiveInfinity);
+    if (vt_status != noErr) {
+      GST_WARNING_OBJECT (self, "VTCompressionSessionCompleteFrames returned %d",
+          (int) vt_status);
+    }
+    gst_vtenc_session_configure_bitrate (self, self->session, self->bitrate);
+    self->effective_bitrate = self->bitrate;
+  }
+    
   vt_status = VTCompressionSessionEncodeFrame (self->session,
       pbuf, ts, duration, frame_props,
       GINT_TO_POINTER (frame->system_frame_number), NULL);
