@@ -1037,8 +1037,10 @@ gst_vtenc_session_configure_bitrate (GstVTEnc * self,
 {
   gst_vtenc_session_configure_property_int (self, session,
       kVTCompressionPropertyKey_AverageBitRate, bitrate);
-  gst_vtenc_session_configure_datarate(self, session,
-      (bitrate * 3) / 16 /* bitrate * 1.5 / 8 */, 1);
+  if (bitrate > 0) {
+    gst_vtenc_session_configure_datarate(self, session,
+        (bitrate * 3) / 16 /* bitrate * 1.5 / 8 */, 1);
+  }
 }
 
 static void
