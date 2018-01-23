@@ -60,6 +60,7 @@ struct _GstVTEnc
 
   CFStringRef profile_level;
   guint bitrate;
+  guint effective_bitrate;
   gboolean allow_frame_reordering;
   gboolean realtime;
   gdouble quality;
