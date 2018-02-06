@@ -292,6 +292,16 @@ gst_vtdec_negotiate (GstVideoDecoder * decoder)
   }
   gst_caps_unref (caps);
 
+  /*
+   * NOTE(amykhajlyshyn):
+   * video frame size can be zero in case 'do-lost' property is set to TRUE
+   * in rtpjitterbuffer.
+   * in this case gst_vtdec_create_session will fail. do not allow this.
+   */
+  if (vtdec->video_info.width == 0 || vtdec->video_info.height == 0) {
+    return TRUE;
+  }
+
   if (!prevcaps || !gst_caps_is_equal (prevcaps, output_state->caps)) {
     gboolean renegotiating = vtdec->session != NULL;
 
@@ -316,8 +326,10 @@ gst_vtdec_negotiate (GstVideoDecoder * decoder)
     }
   }
 
-  // NOTE(amykhajlyshyn): video resolution might change so we need to reset
-  // current texture cache without checking if we create output_textures
+  /*
+   * NOTE(amykhajlyshyn): video resolution might change so we need to reset
+   * current texture cache without checking if we create output_textures
+   */
   if (vtdec->texture_cache != NULL/* && !output_textures*/) {
     gst_video_texture_cache_free (vtdec->texture_cache);
     vtdec->texture_cache = NULL;
