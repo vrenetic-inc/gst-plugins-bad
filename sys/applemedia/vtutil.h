@@ -20,6 +20,10 @@
 #ifndef __GST_VTUTIL_H__
 #define __GST_VTUTIL_H__
 
+#ifdef HAVE_CONFIG_H
+# include <config.h>
+#endif
+
 #include <glib.h>
 #include <CoreFoundation/CoreFoundation.h>
 
@@ -37,6 +41,10 @@ void gst_vtutil_dict_set_data (CFMutableDictionaryRef dict,
     CFStringRef key, guint8 * value, guint64 length);
 void gst_vtutil_dict_set_object (CFMutableDictionaryRef dict,
     CFStringRef key, CFTypeRef * value);
+
+#if HAVE_IOS
+gdouble gst_vtutil_get_ios_version(void);
+#endif
 
 G_END_DECLS
 
