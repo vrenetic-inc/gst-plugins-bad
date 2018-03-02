@@ -23,5 +23,5 @@
 gdouble
 gst_vtutil_get_ios_version(void)
 {
-    return [UIDevice currentDevice].systemVersion.doubleValue;
+  return [UIDevice currentDevice].systemVersion.doubleValue;
 }
