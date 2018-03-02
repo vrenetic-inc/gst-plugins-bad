@@ -88,11 +88,13 @@ if HAVE_IOS
 
 libgstapplemedia_la_SOURCES +=			\
 	iosassetsrc.m 				\
-	iosglmemory.c
+	iosglmemory.c               \
+    vtutil.m
 
 libgstapplemedia_la_LDFLAGS +=			\
 	-Wl,-framework -Wl,Foundation		\
-	-Wl,-framework -Wl,AssetsLibrary
+	-Wl,-framework -Wl,AssetsLibrary    \
+    -Wl,-framework -Wl,UIKit
 
 else
 
