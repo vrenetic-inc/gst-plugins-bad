@@ -562,7 +562,8 @@ gst_vtenc_stop (GstVideoEncoder * enc)
   GstVTEnc *self = GST_VTENC_CAST (enc);
 
   GST_VIDEO_ENCODER_STREAM_LOCK (self);
-  gst_vtenc_flush (enc);
+  if (self->session)
+    gst_vtenc_finish (enc);
   GST_VIDEO_ENCODER_STREAM_UNLOCK (self);
 
   GST_OBJECT_LOCK (self);
@@ -695,7 +696,7 @@ gst_vtenc_set_format (GstVideoEncoder * enc, GstVideoCodecState * state)
   // flush all frames before destroying session to avoid deadlock due to
   // stream lock which is acquired in setcaps function of VideoEncoder
   if (self->session)
-    gst_vtenc_flush (enc);
+    gst_vtenc_finish (enc);
 
   GST_OBJECT_LOCK (self);
   gst_vtenc_destroy_session (self, &self->session);
