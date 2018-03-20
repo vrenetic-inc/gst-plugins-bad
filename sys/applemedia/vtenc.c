@@ -561,8 +561,10 @@ gst_vtenc_stop (GstVideoEncoder * enc)
 {
   GstVTEnc *self = GST_VTENC_CAST (enc);
 
+  GST_VIDEO_ENCODER_STREAM_LOCK (self);
   if (self->session)
     gst_vtenc_finish (enc);
+  GST_VIDEO_ENCODER_STREAM_UNLOCK (self);
 
   GST_OBJECT_LOCK (self);
   gst_vtenc_destroy_session (self, &self->session);
