@@ -137,6 +137,7 @@ static void gst_vtenc_enqueue_buffer (void *outputCallbackRefCon,
 static gboolean gst_vtenc_buffer_is_keyframe (GstVTEnc * self,
     CMSampleBufferRef sbuf);
 
+static GstFlowReturn gst_vtenc_send_outframes(GstVTEnc *self);
 
 #ifndef HAVE_IOS
 static GstVTEncFrame *gst_vtenc_frame_new (GstBuffer * buf,
@@ -183,7 +184,7 @@ gst_vtenc_base_init (GstVTEncClass * klass)
 
   g_free (longname);
   g_free (description);
-    
+
   GstCaps *sink_caps = gst_caps_merge(gst_static_caps_get(&raw_caps), gst_static_caps_get(&gl_caps));
   sink_template = gst_pad_template_new ("sink", GST_PAD_SINK, GST_PAD_ALWAYS, sink_caps);
   gst_element_class_add_pad_template (element_class, sink_template);
@@ -872,7 +873,7 @@ gst_vtenc_create_session (GstVTEnc * self)
       pixel_format_type = kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange;
       break;
   }
-    
+
   gst_vtutil_dict_set_i32 (pb_attrs, kCVPixelBufferPixelFormatTypeKey, pixel_format_type);
 
   status = VTCompressionSessionCreate (NULL,
@@ -1053,7 +1054,7 @@ gst_vtenc_session_configure_datarate(GstVTEnc * self,
   CFNumberRef cf_duration = CFNumberCreate(kCFAllocatorDefault, kCFNumberSInt64Type, &duration);
   CFMutableArrayRef limit = CFArrayCreateMutable(kCFAllocatorDefault, 2, &kCFTypeArrayCallBacks);
   gchar name_str[128];
-    
+
   CFArrayAppendValue(limit, cf_bytes);
   CFArrayAppendValue(limit, cf_duration);
   status = VTSessionSetProperty(session, kVTCompressionPropertyKey_DataRateLimits, limit);
@@ -1318,7 +1319,7 @@ gst_vtenc_encode_frame (GstVTEnc * self, GstVideoCodecFrame * frame)
    * handle a buffer... which will take the stream
    * lock from another thread and then deadlock */
   GST_VIDEO_ENCODER_STREAM_UNLOCK (self);
-    
+
   /* Apply new bitrate if needed */
   if (self->effective_bitrate != self->bitrate) {
     vt_status = VTCompressionSessionCompleteFrames (self->session, kCMTimePositiveInfinity);
@@ -1329,7 +1330,7 @@ gst_vtenc_encode_frame (GstVTEnc * self, GstVideoCodecFrame * frame)
     gst_vtenc_session_configure_bitrate (self, self->session, self->bitrate);
     self->effective_bitrate = self->bitrate;
   }
-    
+
   vt_status = VTCompressionSessionEncodeFrame (self->session,
       pbuf, ts, duration, frame_props,
       GINT_TO_POINTER (frame->system_frame_number), NULL);
@@ -1343,33 +1344,6 @@ gst_vtenc_encode_frame (GstVTEnc * self, GstVideoCodecFrame * frame)
   gst_video_codec_frame_unref (frame);
 
   CVPixelBufferRelease (pbuf);
-
-  renegotiated = FALSE;
-  while ((outframe = g_async_queue_try_pop (self->cur_outframes))) {
-    if (outframe->output_buffer) {
-      if (!renegotiated) {
-        meta = gst_buffer_get_core_media_meta (outframe->output_buffer);
-        /* Try to renegotiate once */
-        if (meta) {
-          if (gst_vtenc_negotiate_downstream (self, meta->sample_buf)) {
-            renegotiated = TRUE;
-          } else {
-            ret = GST_FLOW_NOT_NEGOTIATED;
-            gst_video_codec_frame_unref (outframe);
-            /* the rest of the frames will be pop'd and unref'd later */
-            break;
-          }
-        }
-      }
-
-      gst_vtenc_update_latency (self);
-    }
-
-    /* releases frame, even if it has no output buffer (i.e. failed to encode) */
-    ret =
-        gst_video_encoder_finish_frame (GST_VIDEO_ENCODER_CAST (self),
-        outframe);
-  }
 
   return ret;
 
@@ -1430,6 +1404,8 @@ beach:
   /* needed anyway so the frame will be released */
   if (frame)
     g_async_queue_push (self->cur_outframes, frame);
+
+  (void)gst_vtenc_send_outframes (self);
 }
 
 static gboolean
@@ -1450,6 +1426,42 @@ gst_vtenc_buffer_is_keyframe (GstVTEnc * self, CMSampleBufferRef sbuf)
   }
 
   return result;
+}
+
+static GstFlowReturn
+gst_vtenc_send_outframes (GstVTEnc *self)
+{
+  GstVideoCodecFrame *outframe;
+  GstCoreMediaMeta *meta;
+  gboolean renegotiated = FALSE;
+  GstFlowReturn ret = GST_FLOW_OK;
+
+  while ((outframe = g_async_queue_try_pop (self->cur_outframes))) {
+    if (outframe->output_buffer) {
+      if (!renegotiated) {
+        meta = gst_buffer_get_core_media_meta (outframe->output_buffer);
+        /* Try to renegotiate once */
+        if (meta) {
+          if (gst_vtenc_negotiate_downstream (self, meta->sample_buf)) {
+            renegotiated = TRUE;
+          } else {
+            ret = GST_FLOW_NOT_NEGOTIATED;
+            gst_video_codec_frame_unref (outframe);
+            /* the rest of the frames will be pop'd and unref'd later */
+            break;
+          }
+        }
+      }
+
+      gst_vtenc_update_latency (self);
+    }
+
+    /* releases frame, even if it has no output buffer (i.e. failed to encode) */
+    ret =
+      gst_video_encoder_finish_frame (GST_VIDEO_ENCODER_CAST (self), outframe);
+  }
+
+  return ret;
 }
 
 #ifndef HAVE_IOS
