@@ -1043,6 +1043,8 @@ gst_vtenc_session_configure_bitrate (GstVTEnc * self,
     gst_vtenc_session_configure_datarate(self, session,
         (bitrate * 3) / 16 /* bitrate * 1.5 / 8 */, 1);
   }
+
+  self->effective_bitrate = self->bitrate;
 }
 
 static void
@@ -1167,10 +1169,8 @@ gst_vtenc_encode_frame (GstVTEnc * self, GstVideoCodecFrame * frame)
   CMTime ts, duration;
   GstCoreMediaMeta *meta;
   CVPixelBufferRef pbuf = NULL;
-  GstVideoCodecFrame *outframe;
-  OSStatus vt_status;
+  OSStatus vt_status = noErr;
   GstFlowReturn ret = GST_FLOW_OK;
-  gboolean renegotiated;
   CFDictionaryRef frame_props = NULL;
 
   if (GST_VIDEO_CODEC_FRAME_IS_FORCE_KEYFRAME (frame)) {
@@ -1328,18 +1328,38 @@ gst_vtenc_encode_frame (GstVTEnc * self, GstVideoCodecFrame * frame)
           (int) vt_status);
     }
     gst_vtenc_session_configure_bitrate (self, self->session, self->bitrate);
-    self->effective_bitrate = self->bitrate;
   }
 
-  vt_status = VTCompressionSessionEncodeFrame (self->session,
-      pbuf, ts, duration, frame_props,
-      GINT_TO_POINTER (frame->system_frame_number), NULL);
+  vt_status = noErr;
+
+  /* FIXME: retry loop to silence intermittent kVTVideoEncoderMalfunctionErr
+   * that occurs when switching resolution */
+  for (int i = 0; i < 2; i++) {
+    if (vt_status != noErr) {
+      gst_vtenc_destroy_session(self, &self->session);
+      self->session = gst_vtenc_create_session(self);
+    }
+
+    vt_status = VTCompressionSessionEncodeFrame (self->session,
+                                                 pbuf, ts, duration, frame_props,
+                                                 GINT_TO_POINTER (frame->system_frame_number), NULL);
+    if (vt_status == kVTVideoEncoderMalfunctionErr) {
+      continue;
+    }
+
+    if (vt_status != noErr) {
+      GST_WARNING_OBJECT (self, "VTCompressionSessionEncodeFrame returned %d",
+                          (int) vt_status);
+    }
+    break;
+  }
+
   GST_VIDEO_ENCODER_STREAM_LOCK (self);
 
-  if (vt_status != noErr) {
-    GST_WARNING_OBJECT (self, "VTCompressionSessionEncodeFrame returned %d",
-        (int) vt_status);
-  }
+  /* release input pixel buffer as soon as possible to allow allocation of
+   * new buffers in camera */
+  gst_buffer_unref(frame->input_buffer);
+  frame->input_buffer = NULL;
 
   gst_video_codec_frame_unref (frame);
 
@@ -1369,13 +1389,24 @@ gst_vtenc_enqueue_buffer (void *outputCallbackRefCon,
       GPOINTER_TO_INT (sourceFrameRefCon));
 
   if (status != noErr) {
-    if (frame) {
-      GST_ELEMENT_ERROR (self, LIBRARY, ENCODE, (NULL),
-          ("Failed to encode frame %d: %d", frame->system_frame_number,
-              (int) status));
+    /* FIXME: workaround to silence kVTVideoEncoderMalfunctionErr.
+     * do not break encoding on encoder malfunction, try to restart encoder
+     * session in encode_buffer */
+    if (status == kVTVideoEncoderMalfunctionErr) {
+      if (frame) {
+        GST_WARNING_OBJECT (self, "Failed to encode frame %d: %d", frame->system_frame_number, (int) status);
+      } else {
+        GST_WARNING_OBJECT (self, "Failed to encode (frame unknown): %d", (int) status);
+      }
     } else {
-      GST_ELEMENT_ERROR (self, LIBRARY, ENCODE, (NULL),
-          ("Failed to encode (frame unknown): %d", (int) status));
+      if (frame) {
+        GST_ELEMENT_ERROR (self, LIBRARY, ENCODE, (NULL),
+                           ("Failed to encode frame %d: %d", frame->system_frame_number,
+                           (int) status));
+      } else {
+        GST_ELEMENT_ERROR (self, LIBRARY, ENCODE, (NULL),
+                           ("Failed to encode (frame unknown): %d", (int) status));
+      }
     }
     goto beach;
   }
