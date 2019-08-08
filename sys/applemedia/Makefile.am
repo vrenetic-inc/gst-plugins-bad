@@ -3,6 +3,7 @@ plugin_LTLIBRARIES = libgstapplemedia.la
 libgstapplemedia_la_SOURCES =			\
 	plugin.m				\
 	vtutil.c				\
+        iosvtuti.m                              \
 	corevideomemory.c			\
 	corevideobuffer.c			\
 	coremediabuffer.c			\
@@ -64,7 +65,8 @@ libgstapplemedia_la_LDFLAGS =			\
 	-Wl,-framework -Wl,CoreFoundation	\
 	-Wl,-framework -Wl,CoreMedia		\
 	-Wl,-framework -Wl,CoreVideo 		\
-	-Wl,-framework -Wl,AudioToolbox
+	-Wl,-framework -Wl,AudioToolbox         \
+        -Wl,-framework -Wl,UIKit
 
 noinst_HEADERS =				\
 	avfvideosrc.h				\
@@ -88,23 +90,21 @@ if HAVE_IOS
 
 libgstapplemedia_la_SOURCES +=			\
 	iosassetsrc.m 				\
-	iosglmemory.c               \
-	iosvtutil.m
+	iosglmemory.c               
 
 libgstapplemedia_la_LDFLAGS +=			\
 	-Wl,-framework -Wl,Foundation		\
-	-Wl,-framework -Wl,AssetsLibrary    \
-	-Wl,-framework -Wl,UIKit
+	-Wl,-framework -Wl,AssetsLibrary    
 
 else
 
 libgstapplemedia_la_SOURCES +=			\
-	iosurfacememory.c
+	iosurfacememory.c	
 
 libgstapplemedia_la_LDFLAGS +=			\
 	-Wl,-framework -Wl,Cocoa		\
 	-Wl,-framework -Wl,OpenGL 		\
-	-Wl,-framework -Wl,IOSurface
+	-Wl,-framework -Wl,IOSurface 
 
 endif
 
