@@ -3,7 +3,6 @@ plugin_LTLIBRARIES = libgstapplemedia.la
 libgstapplemedia_la_SOURCES =			\
 	plugin.m				\
 	vtutil.c				\
-        iosvtuti.m                              \
 	corevideomemory.c			\
 	corevideobuffer.c			\
 	coremediabuffer.c			\
@@ -65,8 +64,7 @@ libgstapplemedia_la_LDFLAGS =			\
 	-Wl,-framework -Wl,CoreFoundation	\
 	-Wl,-framework -Wl,CoreMedia		\
 	-Wl,-framework -Wl,CoreVideo 		\
-	-Wl,-framework -Wl,AudioToolbox         \
-        -Wl,-framework -Wl,UIKit
+	-Wl,-framework -Wl,AudioToolbox         
 
 noinst_HEADERS =				\
 	avfvideosrc.h				\
