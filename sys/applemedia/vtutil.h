@@ -42,10 +42,6 @@ void gst_vtutil_dict_set_data (CFMutableDictionaryRef dict,
 void gst_vtutil_dict_set_object (CFMutableDictionaryRef dict,
     CFStringRef key, CFTypeRef * value);
 
-#if HAVE_IOS
-gdouble gst_vtutil_get_ios_version(void);
-#endif
-
 G_END_DECLS
 
 #endif /* __GST_VTUTIL_H__ */

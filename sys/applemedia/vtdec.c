@@ -493,8 +493,7 @@ gst_vtdec_invalidate_session (GstVtdec * vtdec)
 
 #if HAVE_IOS
   // this fixes occasional hang in VTDecompressionSessionInvalidate
-  if (gst_vtutil_get_ios_version() >= 11.0)
-    VTDecompressionSessionWaitForAsynchronousFrames(vtdec->session);
+  VTDecompressionSessionWaitForAsynchronousFrames(vtdec->session);
 #endif
 
   VTDecompressionSessionInvalidate (vtdec->session);
