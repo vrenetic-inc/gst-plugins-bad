@@ -2399,10 +2399,21 @@ gst_ts_demux_queue_data (GstTSDemux * demux, TSDemuxStream * stream,
           (stream->continuity_counter == MAX_CONTINUITY && cc == 0))) {
     GST_LOG ("CONTINUITY: Got expected %d", cc);
   } else {
-    GST_WARNING ("CONTINUITY: Mismatch packet %d, stream %d",
-        cc, stream->continuity_counter);
-    if (stream->state != PENDING_PACKET_EMPTY)
-      stream->state = PENDING_PACKET_DISCONT;
+    if (stream->state != PENDING_PACKET_EMPTY) {
+      if (packet->payload_unit_start_indicator) {
+        /* A mismatch is fatal, except if this is the beginning of a new
+         * frame (from which we can recover) */
+        if (G_UNLIKELY (stream->data)) {
+          g_free (stream->data);
+          stream->data = NULL;
+        }
+        stream->state = PENDING_PACKET_HEADER;
+      } else {
+        GST_WARNING ("CONTINUITY: Mismatch packet %d, stream %d",
+            cc, stream->continuity_counter);
+        stream->state = PENDING_PACKET_DISCONT;
+      }
+    }
   }
   stream->continuity_counter = cc;
 
@@ -3040,7 +3051,8 @@ gst_ts_demux_push_pending_data (GstTSDemux * demux, TSDemuxStream * stream,
     buffer = gst_buffer_list_get (buffer_list, 0);
 
   if (GST_CLOCK_TIME_IS_VALID (stream->pts))
-    GST_BUFFER_PTS (buffer) = stream->pts;
+    GST_BUFFER_PTS (buffer) = GST_BUFFER_DTS (buffer) = stream->pts;
+  /* DTS = PTS by default, we override it if there's a real DTS */
   if (GST_CLOCK_TIME_IS_VALID (stream->dts))
     GST_BUFFER_DTS (buffer) = stream->dts;
 
